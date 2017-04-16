@@ -19,9 +19,16 @@
       padding: 1em;
     }
     
-    #pre {
+    #log {
       margin: 1em 0;
       font: normal 1.2em monospace;
+    }
+    #log div,
+    #log pre {
+      margin: 0;
+    }
+    #log b {
+      color: yellow;
     }
   </style>
 </head>
@@ -42,8 +49,7 @@
       </tr>
     </tbody>
   </table>
-  <p>
-    <pre id="pre"></pre>
+  <p id="log">
   </p>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.4/lodash.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
