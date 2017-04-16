@@ -1,0 +1,15 @@
+{
+  "name": "metheus",
+  "version": "1.0.0",
+  "description": "",
+  "main": "metheus.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "@types/jquery": "^2.0.41",
+    "@types/lodash": "^4.14.62"
+  }
+}
