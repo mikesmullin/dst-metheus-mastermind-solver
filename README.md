@@ -25,6 +25,7 @@ b) The order the pieces are displayed at the top of each Player's screen are in 
 
 ![Image of Number Symbol Alignment](docs/sample-symbol-alignment.png)
 
+![Image of Number Placement Alignment](docs/placement-example-2.png)
 
 ### See also:
 
