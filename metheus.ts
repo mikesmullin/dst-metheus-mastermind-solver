@@ -123,7 +123,7 @@ class Move {
 	}
 
 	public score() {
-		return this.correct + (this.delta *.5)
+		return this.correct + (this.delta * .5)
 	}
 
 	public getSwapA() {
@@ -142,8 +142,8 @@ class Move {
 	public static rankInsert(root: Move, move: Move) {
 		let parent: Move = null;
 		let current = root;
-		let i=0;
-		while (i++<LOOP_BREAKER) {
+		let i = 0;
+		while (i++ < LOOP_BREAKER) {
 			parent = current;
 			if (move.score() < parent.score()) {
 				current = parent.left;
@@ -170,8 +170,8 @@ class Move {
 		if (null == root) return null;
 		let current = root;
 		let mostValuable = current;
-		let i=0;
-		while (i++<LOOP_BREAKER) {
+		let i = 0;
+		while (i++ < LOOP_BREAKER) {
 			if (mostValuable.score() < current.score()) {
 				mostValuable = current;
 			}
@@ -197,9 +197,25 @@ class Move {
 
 	public static havePlayedBefore(last: Move, candidate: Move): boolean {
 		let current = last;
-		let i=0;
-		while (null != current && i++<LOOP_BREAKER) {		
+		let i = 0;
+		while (null != current && i++ < LOOP_BREAKER) {
 			if (Board.compare(current.board, candidate.board)) {
+				//Log.out(`Rejecting board played before at move ${current.num}`);
+				return true;
+			}
+			current = current.prev;
+		}
+		return false;
+	}
+
+	public static hadDeductionAtIndex(last: Move, quantity: number, index: number, deduction: Deduction): boolean {
+		let current = last;
+		let i = 0;
+		while (null != current && i++ < LOOP_BREAKER) {
+			if (current.board.slots[index].quantity == quantity &&
+				current.board.slots[index].deduction == deduction
+			) {
+				//Log.out(`Rejecting index deduced ${deduction} before at move ${current.num}`);
 				return true;
 			}
 			current = current.prev;
@@ -214,8 +230,8 @@ class Slot {
 	public deduction: Deduction;
 
 	public setDeduction(deduction: Deduction) {
+		Log.out(`    ${this.quantity} ${this.deduction[0]} => ${deduction[0]}${deduction == YES ? " FOUND" : ""}`);
 		this.deduction = deduction;
-		Log.out(`          ${this.quantity} ${this.deduction[0]} => ${deduction[0]}${deduction == YES ? " FOUND" : ""}`);
 	}
 
 	public toString() {
@@ -349,7 +365,6 @@ class Solver {
 		}
 		else { // subsequent moves
 			let move = Move.copyMostValuableMove(this.rootMove);
-			Log.out(`** Most valuable score: ${move.score()}`);
 			// try a unique new swap from non-yes deductions
 			let tries = 0;
 			do {
@@ -361,9 +376,6 @@ class Solver {
 				//					// it should reuse A from the previous move
 				//					// unless that resulted in a no change or unexpected gain
 				//					// in which case it should now reuse B from two moves ago
-				//
-				//					
-				//
 				//				}
 				//				else {
 				//					// rotate through untested swaps remaining
@@ -380,8 +392,10 @@ class Solver {
 			while (
 				(Move.havePlayedBefore(this.lastMove, nextMove) ||
 					YES == nextMove.getSwapA().deduction ||
-					YES == nextMove.getSwapB().deduction) &&
-				tries++ < 100);
+					YES == nextMove.getSwapB().deduction ||
+					Move.hadDeductionAtIndex(this.lastMove, nextMove.getSwapA().quantity, nextMove.getSwapA().index, NO) ||
+					Move.hadDeductionAtIndex(this.lastMove, nextMove.getSwapB().quantity, nextMove.getSwapB().index, NO)
+				) && tries++ < 100);
 		}
 		if (null == nextMove) {
 			Log.out("Unable to find next move.");
@@ -391,62 +405,17 @@ class Solver {
 
 		setTimeout(() => this.playMove(nextMove), GUESS_DELAY);
 	}
-
-	// // determine whether a quantity has ever had a given deduction at a specific index in entire history
-	// public hadDeductionAtIndex(quantity: number, index: number, deduction: Deduction): boolean {
-	// 	while (null != this.lastMove.swap) {
-	// 		let pair = this.lastMove.swap;
-	// 		if (
-	// 			(pair.a.quantity == quantity &&
-	// 				pair.a.deduction == deduction &&
-	// 				pair.a.index == index) ||
-	// 			(pair.b.quantity == quantity &&
-	// 				pair.b.deduction == deduction &&
-	// 				pair.b.index == index)
-	// 		) {
-	// 			Log.out(`${quantity} index ${index} deduction ${deduction[0]} happened before at move ${this.lastMove.num}`);
-	// 			return true;
-	// 		}
-	// 		this.lastMove = this.lastMove.prev;
-	// 	}
-	// 	return false;
-	// }
-
-	// public alreadyTried(q1: number, i1: number, q2: number, i2: number): boolean {
-	// 	while (null != this.lastMove.swap) {
-	// 		let pair = this.lastMove.swap;
-	// 		if (
-	// 			(pair.a.quantity == q1 &&
-	// 				pair.a.index == i1) ||
-	// 			(pair.b.quantity == q2 &&
-	// 				pair.b.index == i2)
-	// 		) {
-	// 			Log.out(`${q1}:${i1},${q2}:${i2} happened before at move ${this.lastMove.num}`);
-	// 			return true;
-	// 		}
-	// 		this.lastMove = this.lastMove.prev;
-	// 	}
-	// 	return false;
-	// }
-
-	// public rollback() {
-	// 	Log.out("rollback");
-	// 	let move = new Move(this.lastMove.board, this.lastMove.swap.a.index, this.lastMove.swap.b.index);
-	// 	// assume result is same as before
-	// 	move.correct = this.lastMove.correct;
-	// 	move.delta = this.lastMove.delta * -1; // assume opposite
-	// }
 }
 
 const LOOP_BREAKER = 999;
 const GUESS_DELAY = 50; // ms
-const MAX_GUESSES = 99;
+const MAX_GUESSES = 20;
 const SLOT_COUNT = 6;
 
 let puzzle;
 if (DEBUG) {
-	//puzzle = PuzzleDemo.random(SLOT_COUNT);
-	puzzle = new PuzzleDemo([2, 3, 4, 1, 6, 5]);
+	puzzle = PuzzleDemo.random(SLOT_COUNT);
+	//puzzle = new PuzzleDemo([2, 3, 4, 1, 6, 5]);
 	//puzzle = new PuzzleDemo([2, 4, 6, 1, 5, 3]);
 	//puzzle = new PuzzleDemo([2, 1, 5, 6, 3, 4]);
 	// TODO: try a puzzle where numbers can repeat
