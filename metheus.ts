@@ -1,6 +1,8 @@
 /// <reference path="node_modules/@types/jquery/index.d.ts" />
 /// <reference path="node_modules/@types/lodash/index.d.ts" />
 
+const DEBUG = true;
+
 class Log {
 	public static out(msg: string) {
 		$("<pre/>").text(`${msg}\n`).appendTo("#log");
@@ -20,7 +22,7 @@ class PuzzleDemo implements Puzzle {
 
 	public constructor(solution: number[]) {
 		this.solution = solution;
-		Log.out(`Puzzle: ${solution.join(" ")}`);
+		Log.out(`Puzzle:\n${solution.join("  ")}`);
 	}
 
 	public static random(length: number): Puzzle {
@@ -33,13 +35,13 @@ class PuzzleDemo implements Puzzle {
 	}
 
 	public test(board: Board): number {
-		let correct = 0;
+		let count = 0;
 		for (let i = 0, len = this.solution.length; i < len; i++) {
-			if (board.slots[i].quantity == this.solution[i]) {
-				correct++;
-			}
+			let correct = board.slots[i].quantity == this.solution[i];
+			if (correct) count++;
+			if (DEBUG) board.debugViewCorrectSlots[i] = correct;
 		}
-		return correct;
+		return count;
 	}
 }
 
@@ -72,24 +74,39 @@ const MAYBE = "MAYBE";
 const YES = "YES";
 
 class Move {
-	num: number;
-	prev: Move;
-	board: Board;
-	pair: Pair;
-	correct: number;
-	delta: number;
+	public num: number;
+	public prev?: Move;
+	public board: Board;
+	public pair?: Pair;
+	public correct: number;
+	public delta: number;
+
+	// new move based on given board
+	public constructor(board: Board, aIndex?: number, bIndex?: number) {
+		if (null != aIndex && null != bIndex) {
+			let oldA = _.cloneDeep(board.slots[aIndex]);
+			let oldB = _.cloneDeep(board.slots[bIndex]);
+			board.slots[aIndex] = oldB;
+			board.slots[aIndex].index = aIndex;
+			board.slots[bIndex] = oldA;
+			board.slots[bIndex].index = bIndex;
+		}
+		move.board = _.cloneDeep(board);
+		if (null != aIndex && null != bIndex) {
+			move.pair = new Pair();
+			move.pair.a = _.cloneDeep(board.slots[aIndex]);
+			move.pair.b = _.cloneDeep(board.slots[bIndex]);
+		}
+		return move;
+	}
 
 	public render() {
 		let s = "";
 		for (let i = 0, len = this.board.slots.length; i < len; i++) {
 			let slot = this.board.slots[i];
-			s += (
-				slot.quantity == this.pair.a.quantity ||
-				slot.quantity == this.pair.b.quantity
-			) ?
-				`<b>${slot.quantity}${slot.deduction[0]}</b> `
-				:
-				`${slot.quantity}${slot.deduction[0]} `;
+			let underline = (null != this.pair && (slot.quantity == this.pair.a.quantity || slot.quantity == this.pair.b.quantity));
+			let bold = this.board.debugViewCorrectSlots[i];
+			s += `${bold ? "<b>" : ""}${underline ? "<u>" : ""}${slot.quantity}${slot.deduction[0]}${underline ? "</u>" : ""}${bold ? "</b>" : ""} `;
 		}
 		s += ` = ${this.correct} (${this.delta < 0 ? this.delta : `+${this.delta}`})`;
 		Log.html(s);
@@ -97,9 +114,9 @@ class Move {
 }
 
 class Slot {
-	index: number;
-	quantity: number;
-	deduction: Deduction;
+	public index: number;
+	public quantity: number;
+	public deduction: Deduction;
 
 	public setDeduction(deduction: Deduction) {
 		this.deduction = deduction;
@@ -122,6 +139,7 @@ class Pair {
 
 class Board {
 	public slots: Slot[];
+	public debugViewCorrectSlots: boolean[] = [];
 
 	public constructor(slots: Slot[]) {
 		this.slots = slots;
@@ -155,45 +173,42 @@ class Board {
 
 class Solver {
 	private puzzle: Puzzle;
-	private board: Board;
 	private moves: number = 0;
 	public lastMove: Move; // history of moves
-
-	public static solve(puzzle: Puzzle) {
-		return new Solver(puzzle);
-	}
 
 	public constructor(puzzle: Puzzle) {
 		this.puzzle = puzzle;
 
-		// first guess
-		this.board = new Board(_.map(new Array(this.puzzle.getSlotCount()), (nil, i) => {
-			let slot = new Slot();
-			slot.index = i;
-			slot.quantity = i + 1;
-			slot.deduction = UNKNOWN;
-			return slot;
-		}));
-
-		// begin
-		this.testGuess();
+		// play opening move
+		this.playMove(this.newMove(new Board(_.map(
+			new Array(this.puzzle.getSlotCount()),
+			(nil, i) => {
+				let slot = new Slot();
+				slot.index = i;
+				slot.quantity = i + 1;
+				slot.deduction = UNKNOWN;
+				return slot;
+			}))));
 	}
 
-	public testGuess() {
+	public playMove(move: Move) {
+		// sequence move into play
+		move.num = ++this.moves;
+		move.prev = this.lastMove;
+		this.lastMove = move;
+
 		if (this.moves > MAX_GUESSES) {
 			Log.out("Too many guesses; we lose.");
 			return;
 		}
 
 		{
-			let correct = this.puzzle.test(this.board);
-			let delta = correct - (null != this.lastMove ? this.lastMove.correct : 0);
-			this.board.render();
-			if (null != this.lastMove) {
-				this.lastMove.correct = correct;
-				this.lastMove.delta = delta;
-				this.lastMove.render();
-			}			
+			let correct = this.puzzle.test(this.lastMove.board);
+			let delta = correct - (null != this.lastMove ? this.lastMove.correct || 0 : 0);
+			this.lastMove.board.render();
+			this.lastMove.correct = correct;
+			this.lastMove.delta = delta;
+			this.lastMove.render();
 			if (correct == this.puzzle.getSlotCount()) {
 				Log.out(`You win in ${this.moves} moves.`);
 				return;
@@ -201,231 +216,44 @@ class Solver {
 		}
 
 		// try again
-		let priorityCandidates = [];
-		let nonCandidates = [];
-		if (null != this.lastMove) {
+		if (null != this.lastMove.pair) {
 			if (this.lastMove.delta == 0) {
 				// no difference; both must be NO?
 				this.lastMove.pair.a.setDeduction(NO);
 				this.lastMove.pair.b.setDeduction(NO);
-
-//				if ( // if two moves ago we gained one
-//					null != this.lastMove.prev && this.lastMove.prev.delta == 1 &&
-//					// and it was M,M
-//					this.lastMove.prev.pair.matchesDeductions(MAYBE, MAYBE)
-//				) {
-//					Log.out("experimental 2");
-//					// then the slot that we moved last
-//					// which was part of the pair two moves ago
-//					// must be Y
-//					// and the other N
-//					if (
-//						(this.lastMove.pair.a.quantity == this.lastMove.prev.pair.a.quantity) ||
-//						(this.lastMove.pair.b.quantity == this.lastMove.prev.pair.a.quantity)
-//					) {
-//						this.board.findOne((s) => s.index == this.lastMove.prev.pair.b.index).setDeduction(YES);
-//					}
-//					else {
-//						this.board.findOne((s) => s.index == this.lastMove.prev.pair.a.index).setDeduction(YES);
-//					}
-//				}
 			}
 			else if (this.lastMove.delta == 1) {
-				// // if either of these MAYBEs has ever been NO before, then the other is YES now
-				// if (this.board.hadDeductionAtIndex(move.after.a, NO)) {
-				// 	this.board.getSlot(move.after.a.index).setDeduction(YES);
-				// 	this.board.getSlot(move.after.b.index).setDeduction(NO);
-				// }
-				// else if (this.board.hadDeductionAtIndex(move.after.b, NO)) {
-				// 	this.board.getSlot(move.after.b.index).setDeduction(YES);
-				// 	this.board.getSlot(move.after.a.index).setDeduction(NO);
-				// }
-				// else {
 				// difference; one is now right, but we don't know which
 				// unless we have history to narrow it, then we have specific match
-
-
-				// now decide what to do with this information
-				//if ( // if two moves ago we gained one
-				//	(null != twoMovesAgo && twoMovesAgo.delta == 1 &&
-				//		// and it was M,M
-				//		twoMovesAgo.after.a.deduction == MAYBE &&
-				//		twoMovesAgo.after.b.deduction == MAYBE)
-				//) {
-				//	Log.out("experimental 3");
-				//
-				//	if (
-				//		(move.after.a.quantity == twoMovesAgo.after.a.quantity)	||
-				//		(move.after.a.quantity == twoMovesAgo.after.b.quantity)
-				//	) {
-				//		move.after.a.setDeduction(YES);
-				//		move.after.b.setDeduction(MAYBE);
-				//	}
-				//	else {
-				//		move.after.a.setDeduction(MAYBE);
-				//		move.after.b.setDeduction(YES);
-				//	}
-				//}
-				//else {
 				this.lastMove.pair.a.setDeduction(MAYBE);
 				this.lastMove.pair.b.setDeduction(MAYBE);
-				//}
 			}
 			else if (this.lastMove.delta == 2) {
 				// very positive difference; both are now right for sure
 				this.lastMove.pair.a.setDeduction(YES);
 				this.lastMove.pair.b.setDeduction(YES);
-
-				// if last two were also maybes, then the third is YES
 			}
 			else if (this.lastMove.delta == -1) {
 				// difference; one was right, but we don't know which
 				// so first step is always to put it back
-				this.unswap();
-
-				// now decide what to do with this information
-				//if ( // if two moves ago we gained one
-				//	(null != threeMovesAgo && threeMovesAgo.delta == 1 &&
-				//		// and it was M,M
-				//		threeMovesAgo.after.a.deduction == MAYBE &&
-				//		threeMovesAgo.after.b.deduction == MAYBE)
-				//) {
-				//	Log.out("experimental");
-				//	// then the slot that we moved last
-				//	// which was part of the pair two moves ago
-				//	// must be Y
-				//	// and the other N
-				//
-				//	// note: assumes A is the one we always chose to reswap
-				//
-				//	// 3 and 4 were the previous two
-				//	// we kept 3 and tried 6 but lost one
-				//	// therefore 3 (being present in now and prev) is YES
-				//	// and 6 is NO
-				//
-				//	if (
-				//		(move.after.a.quantity == threeMovesAgo.after.a.quantity)
-				//	) {
-				//		move.after.a.setDeduction(YES);
-				//		move.after.b.setDeduction(NO);
-				//	}
-				//	else {
-				//		move.after.a.setDeduction(NO);
-				//		move.after.b.setDeduction(YES);
-				//	}
-				//}
-				//else {
 				this.lastMove.pair.a.setDeduction(MAYBE);
 				this.lastMove.pair.b.setDeduction(MAYBE);
-				//}
-
-
-
-				// TRICKY: if swap MAYBE, NO = -1 then REVERSE and deduce MAYBE => YES
-
-				// if previously MAYBE, MAYBE, but now -1, then a is YES
-				//if (move.after.a.deduction == MAYBE && move.after.b.deduction == MAYBE) {
-				//	this.board.getSlot(move.after.a.index)
-				//}
-
-
-
-				//this.board.setRemainderDeduction(MAYBE, MAYBE, YES);
+				this.unswap();
 			}
 			else if (this.lastMove.delta == -2) {
 				// difference; both were right for sure
-				this.unswap();
 				this.lastMove.pair.a.setDeduction(YES);
 				this.lastMove.pair.b.setDeduction(YES);
-
-				// if last two were also maybes, then the third is YES
-			}
-
-			// M,M and N,N are good to iterate with 
-			// since you know one of them is going to be Y or N when resolved
-			if (
-				(this.lastMove.pair.a.deduction == MAYBE && this.lastMove.pair.b.deduction == MAYBE) ||
-				(this.lastMove.pair.a.deduction == NO && this.lastMove.pair.b.deduction == NO)
-			) {
-				// ensure next swap contains one slot from this last pair
-				// and one random other slot
-				priorityCandidates.push(this.lastMove.pair.a);
-				// which is not the other slot we just tried
-				nonCandidates.push(this.lastMove.pair.b);
+				this.unswap();
 			}
 		}
 
-		let a, b, allGood = false;
-		do {
-			// select next pair
-			let randomCandidates: Slot[] = [];
-			for (let i = 0, len = this.puzzle.getSlotCount(); i < len; i++) {
-				let slot = this.board.slots[i];
-				if (YES != slot.deduction && priorityCandidates[0] != slot) {
-					randomCandidates.push(slot);
-				}
-			}
-			let candidates = _.difference((randomCandidates).concat(priorityCandidates), nonCandidates);
-			if (candidates.length < 2) {
-				Log.out("Only one unknown remains yet puzzle isn't solved? Impossible!");
-				console.log(candidates);
-				return;
-			}
-			Log.out("--");
-			let format = (a: Slot[]) =>
-				_.map(a, (slot) => `${slot.quantity}${slot.deduction[0]}@${slot.index}`).join(", ");
-			Log.out("priorityCandidates: " + format(priorityCandidates));
-			Log.out("randomCandidates: " + format(randomCandidates));
-			Log.out("nonCandidates: " + format(nonCandidates));
-			Log.out("candidates: " + format(candidates));
-
-			// if any of these candidates have ever returned N before
-			// while in the positions we're about to swap into
-			// don't try it again
-
-			a = candidates.pop();
-			b = candidates.pop();
-
-			if (this.hadDeductionAtIndex(a.quantity, b.index, NO)) {
-				nonCandidates.push(a);
-			}
-			else if (this.hadDeductionAtIndex(b.quantity, a.index, NO)) {
-				nonCandidates.push(b);
-			}
-			else if (this.alreadyTried(a.quantity, b.index, b.quantity, a.index)) {
-				b = candidates.pop();
-			}
-			else {
-				allGood = true;
-			}
-		}
-		while (!allGood);
-		this.swap(a.index, b.index);
-
-		setTimeout(() => this.testGuess(), GUESS_DELAY);
-	}
-
-	public swap(aIndex: number, bIndex: number) {
-		let move = new Move();
-		move.num = ++this.moves;
-		let oldA = _.cloneDeep(this.board.slots[aIndex]);
-		let oldB = _.cloneDeep(this.board.slots[bIndex]);
-		this.board.slots[aIndex] = oldB;
-		this.board.slots[aIndex].index = aIndex;
-		this.board.slots[bIndex] = oldA;
-		this.board.slots[bIndex].index = bIndex;
-		move.board = _.cloneDeep(this.board);
-		move.pair = new Pair();
-		move.pair.a = _.cloneDeep(this.board.slots[aIndex]);
-		move.pair.b = _.cloneDeep(this.board.slots[bIndex]);
-		move.prev = this.lastMove;
-		this.lastMove = move;
-		Log.out(`          ${move.pair.a.quantity} <> ${move.pair.b.quantity}`);
+		setTimeout(() => this.playMove(this.newMove(a, b)), GUESS_DELAY);
 	}
 
 	// determine whether a quantity has ever had a given deduction at a specific index in entire history
 	public hadDeductionAtIndex(quantity: number, index: number, deduction: Deduction): boolean {
-		while (null != this.lastMove) {
+		while (null != this.lastMove.pair) {
 			let pair = this.lastMove.pair;
 			if (
 				(pair.a.quantity == quantity &&
@@ -444,7 +272,7 @@ class Solver {
 	}
 
 	public alreadyTried(q1: number, i1: number, q2: number, i2: number): boolean {
-		while (null != this.lastMove) {
+		while (null != this.lastMove.pair) {
 			let pair = this.lastMove.pair;
 			if (
 				(pair.a.quantity == q1 &&
@@ -461,10 +289,10 @@ class Solver {
 	}
 
 	public unswap() {
-		this.swap(this.lastMove.pair.a.index, this.lastMove.pair.b.index);
+		let move = this.newMove(this.lastMove.board, this.lastMove.pair.a.index, this.lastMove.pair.b.index);
 		// assume result is same as before
-		this.lastMove.correct = this.lastMove.prev.correct;
-		this.lastMove.delta = this.lastMove.prev.delta;
+		move.correct = this.lastMove.correct;
+		move.delta = this.lastMove.delta * -1; // assume opposite
 	}
 }
 
@@ -472,10 +300,16 @@ class Solver {
 const GUESS_DELAY = 50; // ms
 const MAX_GUESSES = 99;
 const SLOT_COUNT = 6;
-//let puzzle = PuzzleDemo.random(SLOT_COUNT);
-//let puzzle = new PuzzleDemo([2, 3, 4, 1, 6, 5]);
-let puzzle = new PuzzleDemo([2, 4, 6, 1, 5, 3]);
-//let puzzle = new PuzzleDemo([2, 1, 5, 6, 3, 4]);
-// TODO: try a puzzle where numbers can repeat
-//let human = new HumanPuzzleInterface(SLOT_COUNT);
-Solver.solve(puzzle);
+
+let puzzle;
+if (DEBUG) {
+	//puzzle = PuzzleDemo.random(SLOT_COUNT);
+	puzzle = new PuzzleDemo([2, 3, 4, 1, 6, 5]);
+	//puzzle = new PuzzleDemo([2, 4, 6, 1, 5, 3]);
+	//puzzle = new PuzzleDemo([2, 1, 5, 6, 3, 4]);
+	// TODO: try a puzzle where numbers can repeat
+}
+else {
+	puzzle = new HumanPuzzleInterface(SLOT_COUNT);
+}
+new Solver(puzzle);
