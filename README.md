@@ -23,6 +23,8 @@ a) Player 1 and Player 2 have to move their pieces the same way at the same time
 
 b) The order the pieces are displayed at the top of each Player's screen are in order, and should be paired together in that order; from left-to-right 1, 2, 3, 4, 5, 6.
 
+![Image of Number Symbol Alignment](docs/sample-symbol-alignment.png)
+
 
 ### See also:
 
