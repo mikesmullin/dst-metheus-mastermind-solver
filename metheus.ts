@@ -89,12 +89,14 @@ class Move {
 	public correct: number; // score
 	public delta: number; // score
 	public prev?: Move; // play sequence
+	public base: Move; // copied from
 	public swap?: Swap;
 	private left: Move; // bst
 	private right: Move; // bst
 
-	// new move based on copy of given board
-	public constructor(board: Board, swap?: Swap) {
+	// new move based on copy of given move
+	public constructor(base: Move, board: Board, swap?: Swap) {
+		this.base = base;
 		this.board = _.cloneDeep(board);
 		if (null != swap) {
 			let tmp = this.board.slots[swap.a];
@@ -107,7 +109,7 @@ class Move {
 	}
 
 	public render() {
-		let s = "";
+		let s = `${this.num}: `;
 		for (let i = 0, len = this.board.slots.length; i < len; i++) {
 			let slot = this.board.slots[i];
 			let underline = (null != this.swap && (slot.quantity == this.board.slots[this.swap.a].quantity || slot.quantity == this.board.slots[this.swap.b].quantity));
@@ -116,12 +118,12 @@ class Move {
 		}
 		console.log("num: ", this.num);
 		s += (this.num === 1 ? "FIRST" :
-			` = ${this.correct} (${this.delta < 0 ? this.delta : `+${this.delta}`})`);
+			` = ${this.correct} (${this.delta < 0 ? this.delta : `+${this.delta}`}) score: ${this.score()}`);
 		Log.html(s);
 	}
 
 	public score() {
-		return this.correct + this.delta;
+		return this.correct + (this.delta *.5)
 	}
 
 	public getSwapA() {
@@ -140,8 +142,8 @@ class Move {
 	public static rankInsert(root: Move, move: Move) {
 		let parent: Move = null;
 		let current = root;
-		while (true) {
-			debugger;
+		let i=0;
+		while (i++<LOOP_BREAKER) {
 			parent = current;
 			if (move.score() < parent.score()) {
 				current = parent.left;
@@ -168,25 +170,35 @@ class Move {
 		if (null == root) return null;
 		let current = root;
 		let mostValuable = current;
-		while (true) {
-			debugger;
-			if (current.score() > mostValuable.score()) {
+		let i=0;
+		while (i++<LOOP_BREAKER) {
+			if (mostValuable.score() < current.score()) {
 				mostValuable = current;
+			}
+			if (current.right && current.score() < current.right.score()) {
+				current = current.right;
+			}
+			else if (current.left && current.score() < current.left.score()) {
 				current = current.left;
 			}
 			else {
-				current = current.right;
-			}
-			if (null == current) {
-				return _.cloneDeep(mostValuable);
+				return mostValuable.clone();
 			}
 		}
 	}
 
+	public clone(): Move {
+		let move = new Move(this, this.board);
+		move.num = this.num;
+		move.correct = this.correct;
+		move.delta = this.delta;
+		return move;
+	}
+
 	public static havePlayedBefore(last: Move, candidate: Move): boolean {
 		let current = last;
-		while (null != current) {
-			debugger;
+		let i=0;
+		while (null != current && i++<LOOP_BREAKER) {		
 			if (Board.compare(current.board, candidate.board)) {
 				return true;
 			}
@@ -254,12 +266,13 @@ class Solver {
 	private moves: number = 0;
 	public rootMove: Move; // root BST node
 	public lastMove: Move; // history of played moves
+	public solution: number[];
 
 	public constructor(puzzle: Puzzle) {
 		this.puzzle = puzzle;
 
 		// begin with opening move
-		this.rootMove = new Move(new Board(_.map(
+		this.rootMove = new Move(null, new Board(_.map(
 			new Array(this.puzzle.getSlotCount()),
 			(nil, i) => {
 				let slot = new Slot();
@@ -279,7 +292,7 @@ class Solver {
 
 		// test and score the move
 		move.correct = this.puzzle.test(move.board);
-		move.delta = move.correct - (null != move.prev ? move.prev.correct || 0 : 0);
+		move.delta = move.correct - (null != move.base ? move.base.correct || 0 : 0);
 		if (this.moves > MAX_GUESSES) {
 			Log.out("Too many guesses; we lose.");
 			return;
@@ -332,10 +345,11 @@ class Solver {
 		let nextMove: Move;
 		if (1 === this.moves) { // follow-up to first move
 			// just play a swap of the first two positions
-			nextMove = new Move(this.lastMove.board, new Swap(0, 1));
+			nextMove = new Move(this.lastMove, this.lastMove.board, new Swap(0, 1));
 		}
 		else { // subsequent moves
 			let move = Move.copyMostValuableMove(this.rootMove);
+			Log.out(`** Most valuable score: ${move.score()}`);
 			// try a unique new swap from non-yes deductions
 			let tries = 0;
 			do {
@@ -356,21 +370,23 @@ class Solver {
 				//
 				//				}
 
-				nextMove = new Move(move.board, new Swap(
+				nextMove = new Move(move, move.board, new Swap(
 					Math.floor(Math.random() * move.board.slots.length),
 					Math.floor(Math.random() * move.board.slots.length)
 				));
 				console.log("candidate next move ", nextMove);
-				debugger;
-
 			}
+			// TODO: fix this; its retrying previous combos
 			while (
 				(Move.havePlayedBefore(this.lastMove, nextMove) ||
 					YES == nextMove.getSwapA().deduction ||
 					YES == nextMove.getSwapB().deduction) &&
 				tries++ < 100);
 		}
-
+		if (null == nextMove) {
+			Log.out("Unable to find next move.");
+			return;
+		}
 		console.log("accepted next move ", nextMove);
 
 		setTimeout(() => this.playMove(nextMove), GUESS_DELAY);
@@ -422,7 +438,7 @@ class Solver {
 	// }
 }
 
-
+const LOOP_BREAKER = 999;
 const GUESS_DELAY = 50; // ms
 const MAX_GUESSES = 99;
 const SLOT_COUNT = 6;
