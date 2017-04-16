@@ -19,7 +19,7 @@ class PuzzleDemo implements Puzzle {
 
 	public constructor(solution: number[]) {
 		this.solution = solution;
-		Log.out(`Puzzle: ${solution.join(", ")}`);
+		Log.out(`Puzzle: ${solution.join(" ")}`);
 	}
 
 	public static random(length: number): Puzzle {
@@ -88,11 +88,11 @@ class Solver {
 	public testGuess() {
 		this.guesses++;
 		let correct = this.puzzle.test(this.board);
-		Log.out(`Guess [${this.guesses}]: ${this.board}`);
+		let delta = correct - this.lastCorrect || 0;
+		Log.out(`${correct} (${delta < 0 ? delta : `+${delta}`})  ${this.board}`);
 		this.board.render();
-		Log.out(`Number correct: ${correct} (${correct - this.lastCorrect})`);
 		if (correct == this.puzzle.getSlotCount()) {
-			Log.out(`You win in !${this.guesses} guesses.`);
+			Log.out(`You win in ${this.guesses} guesses.`);
 			return;
 		}
 		
@@ -117,22 +117,21 @@ class Solver {
 				// if one was a maybe and one was not, then one is now a for sure
 
 				this.board.unswap();
+				correct = this.lastCorrect;
 				this.board.setDeduction("MAYBE", "MAYBE");
 			}
 			else if (correct == this.lastCorrect - 2) {
 				// difference; both were right for sure
-				debugger;
 				this.board.unswap();
-				this.board.setDeduction("NO", "NO");
+				correct = this.lastCorrect;
+				this.board.setDeduction("YES", "YES");
 			}
 		}
 		// swap next pair
 		let candidates: number[] = [];
-		console.log('--');
 		for (let i = 0, len = this.puzzle.getSlotCount(); i < len; i++) {
-			console.log("candidate ", { i: i, d: this.board.getSlot(i).deduction });
+			//console.log("candidate ", { i: i, d: this.board.getSlot(i).deduction });
 			if ("YES" != this.board.getSlot(i).deduction) {
-				console.log("push");
 				candidates.push(i);
 			}
 		}
@@ -156,7 +155,6 @@ class Solver {
 type Deduction = "UNKNOWN" | "NO" | "MAYBE" | "YES";
 
 class Slot {
-	index: number;
 	symbol: string;
 	quantity: number;
 	deduction: Deduction;
@@ -184,7 +182,6 @@ class Board {
 	public constructor(quantities: number[]) {
 		for (let i = 0, len = quantities.length; i < len; i++) {
 			let slot = new Slot();
-			slot.index = i;
 			slot.symbol = Board.symbols.substr(i, 1);
 			slot.quantity = quantities[i];
 			slot.deduction = "UNKNOWN";
@@ -201,6 +198,7 @@ class Board {
 		move.before = pairBefore;
 
 		// move
+		Log.out(`        m: ${this.board[a].quantity} <> ${this.board[b].quantity}`);
 		let c = this.board[a];
 		this.board[a] = this.board[b];
 		this.board[b] = c;
@@ -215,18 +213,32 @@ class Board {
 
 	public setDeduction(a: Deduction, b: Deduction) {
 		let lastPair = this.history[this.history.length - 1].after;
-		Log.out(`${lastPair.a.quantity} ${lastPair.a.deduction[0]} => ${a[0]}, ${lastPair.b.quantity} ${lastPair.b.deduction[0]} => ${b[0]}`);
-		lastPair.a.deduction = this.board[lastPair.a.index].deduction = a;
-		lastPair.b.deduction = this.board[lastPair.b.index].deduction = b;
+		Log.out(`        d: ${lastPair.a.quantity} ${lastPair.a.deduction[0]} => ${a[0]}, ${lastPair.b.quantity} ${lastPair.b.deduction[0]} => ${b[0]}`);
+		let ai = this.board.indexOf(lastPair.a);
+		lastPair.a.deduction = this.board[this.findSlotIndex(lastPair.a)].deduction = a;
+		lastPair.b.deduction = this.board[this.findSlotIndex(lastPair.b)].deduction = b;
+	}
+
+	public findSlotIndex(slot: Slot): number
+	{
+		for (let i=0,len=this.board.length; i<len; i++)
+		{
+			if (slot.quantity == this.board[i].quantity)
+			{
+				return i;
+			}
+		}
+		throw "Quantity not found on board? Impossible!";
 	}
 
 	public unswap() {
 		let lastPair = this.history[this.history.length - 1].after;
-		this.swap(lastPair.a.index, lastPair.b.index);
+		this.swap(this.findSlotIndex(lastPair.a), this.findSlotIndex(lastPair.b));
+		Log.out(`        ${this}`);
 	}
 
 	public toString(): string {
-		return this.board.join(", ");
+		return this.board.join(" ");
 	}
 
 	public getMove(delta: number) {
