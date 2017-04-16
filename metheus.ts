@@ -114,7 +114,9 @@ class Move {
 			let bold = this.board.debugViewCorrectSlots[i];
 			s += `${bold ? "<b>" : ""}${underline ? "<u>" : ""}${slot.quantity}${slot.deduction[0]}${underline ? "</u>" : ""}${bold ? "</b>" : ""} `;
 		}
-		s += ` = ${this.correct} (${this.delta < 0 ? this.delta : `+${this.delta}`})`;
+		console.log("num: ", this.num);
+		s += (this.num === 1 ? "FIRST" :
+			` = ${this.correct} (${this.delta < 0 ? this.delta : `+${this.delta}`})`);
 		Log.html(s);
 	}
 
@@ -123,22 +125,23 @@ class Move {
 	}
 
 	public getSwapA() {
-		return this.board[this.swap.a];
+		return this.board.slots[this.swap.a];
 	}
 
 	public getSwapB() {
-		return this.board[this.swap.b];
+		return this.board.slots[this.swap.b];
 	}
 
-	public isSwapDeduction(a: Deduction, b: Deduction) {
+	public hasSwapDeduction(a: Deduction, b: Deduction) {
 		return this.getSwapA().deduction == a &&
 			this.getSwapB().deduction == b;
 	}
 
 	public static rankInsert(root: Move, move: Move) {
 		let parent: Move = null;
-		let current = move;
+		let current = root;
 		while (true) {
+			debugger;
 			parent = current;
 			if (move.score() < parent.score()) {
 				current = parent.left;
@@ -164,16 +167,18 @@ class Move {
 	public static copyMostValuableMove(root: Move): Move {
 		if (null == root) return null;
 		let current = root;
-		let lastHighScore = current;
+		let mostValuable = current;
 		while (true) {
-			if (current.score() > lastHighScore.score()) {
+			debugger;
+			if (current.score() > mostValuable.score()) {
+				mostValuable = current;
 				current = current.left;
 			}
 			else {
 				current = current.right;
 			}
 			if (null == current) {
-				return _.cloneDeep(lastHighScore);
+				return _.cloneDeep(mostValuable);
 			}
 		}
 	}
@@ -181,6 +186,7 @@ class Move {
 	public static havePlayedBefore(last: Move, candidate: Move): boolean {
 		let current = last;
 		while (null != current) {
+			debugger;
 			if (Board.compare(current.board, candidate.board)) {
 				return true;
 			}
@@ -273,7 +279,7 @@ class Solver {
 
 		// test and score the move
 		move.correct = this.puzzle.test(move.board);
-		move.delta = move.correct - (null != move ? move.correct || 0 : 0);
+		move.delta = move.correct - (null != move.prev ? move.prev.correct || 0 : 0);
 		if (this.moves > MAX_GUESSES) {
 			Log.out("Too many guesses; we lose.");
 			return;
@@ -306,7 +312,9 @@ class Solver {
 				move.getSwapB().setDeduction(YES);
 			}
 		}
-		Move.rankInsert(this.rootMove, move);
+		if (this.rootMove != move) {
+			Move.rankInsert(this.rootMove, move);
+		}
 
 		// update user view
 		move.board.render();
@@ -328,21 +336,42 @@ class Solver {
 		}
 		else { // subsequent moves
 			let move = Move.copyMostValuableMove(this.rootMove);
-			// try a unique new swap
+			// try a unique new swap from non-yes deductions
+			let tries = 0;
 			do {
-				// if the previous swap was M,M or N,N
-				if (
-					(move.isSwapDeduction(MAYBE, MAYBE) ||
-						move.isSwapDeduction(NO, NO))
-				) {
-					
-				}
-				// it should reuse A from the previous move
-				// unless that resulted in a no change or unexpected gain
-				// in which case it should now reuse B from two moves ago
+				//				// if the previous swap was M,M or N,N
+				//				if (
+				//					(move.hasSwapDeduction(MAYBE, MAYBE) ||
+				//						move.hasSwapDeduction(NO, NO))
+				//				) {
+				//					// it should reuse A from the previous move
+				//					// unless that resulted in a no change or unexpected gain
+				//					// in which case it should now reuse B from two moves ago
+				//
+				//					
+				//
+				//				}
+				//				else {
+				//					// rotate through untested swaps remaining
+				//
+				//				}
+
+				nextMove = new Move(move.board, new Swap(
+					Math.floor(Math.random() * move.board.slots.length),
+					Math.floor(Math.random() * move.board.slots.length)
+				));
+				console.log("candidate next move ", nextMove);
+				debugger;
+
 			}
-			while (Move.havePlayedBefore(this.lastMove, move));
+			while (
+				(Move.havePlayedBefore(this.lastMove, nextMove) ||
+					YES == nextMove.getSwapA().deduction ||
+					YES == nextMove.getSwapB().deduction) &&
+				tries++ < 100);
 		}
+
+		console.log("accepted next move ", nextMove);
 
 		setTimeout(() => this.playMove(nextMove), GUESS_DELAY);
 	}
