@@ -1,7 +1,7 @@
 /// <reference path="node_modules/@types/jquery/index.d.ts" />
 /// <reference path="node_modules/@types/lodash/index.d.ts" />
 
-const DEBUG = true;
+const DEBUG = false;
 
 class Log {
 	public static out(msg: string) {
@@ -49,7 +49,7 @@ class HumanPuzzleInterface implements Puzzle {
 	private slotCount: number;
 
 	public constructor(slotCount: number) {
-		this.slotCount;
+		this.slotCount = slotCount;
 	}
 
 	public getSlotCount(): number {
@@ -60,9 +60,9 @@ class HumanPuzzleInterface implements Puzzle {
 		let answer;
 		do {
 			answer = parseInt(prompt(
-				`Please try:\n\t${board}\n\nHow many are correct?`), 10);
+				`Please try:\n\n    ${board}\n\nHow many are correct?`), 10);
 		}
-		while (!isNaN(answer));
+		while (isNaN(answer));
 		return answer;
 	}
 }
@@ -116,7 +116,6 @@ class Move {
 			let bold = this.board.debugViewCorrectSlots[i];
 			s += `${bold ? "<b>" : ""}${underline ? "<u>" : ""}${slot.quantity}${slot.deduction[0]}${underline ? "</u>" : ""}${bold ? "</b>" : ""} `;
 		}
-		console.log("num: ", this.num);
 		s += (this.num === 1 ? "FIRST" :
 			` = ${this.correct} (${this.delta < 0 ? this.delta : `+${this.delta}`}) score: ${this.score()}`);
 		Log.html(s);
@@ -200,7 +199,7 @@ class Move {
 		let i = 0;
 		while (null != current && i++ < LOOP_BREAKER) {
 			if (Board.compare(current.board, candidate.board)) {
-				//Log.out(`Rejecting board played before at move ${current.num}`);
+				//if (DEBUG) Log.out(`Rejecting board played before at move ${current.num}`);
 				return true;
 			}
 			current = current.prev;
@@ -215,7 +214,7 @@ class Move {
 			if (current.board.slots[index].quantity == quantity &&
 				current.board.slots[index].deduction == deduction
 			) {
-				//Log.out(`Rejecting index deduced ${deduction} before at move ${current.num}`);
+				//if (DEBUG) Log.out(`Rejecting index deduced ${deduction} before at move ${current.num}`);
 				return true;
 			}
 			current = current.prev;
@@ -230,7 +229,7 @@ class Slot {
 	public deduction: Deduction;
 
 	public setDeduction(deduction: Deduction) {
-		Log.out(`    ${this.quantity} ${this.deduction[0]} => ${deduction[0]}${deduction == YES ? " FOUND" : ""}`);
+		if (DEBUG) Log.out(`    ${this.quantity} ${this.deduction[0]} => ${deduction[0]}${deduction == YES ? " FOUND" : ""}`);
 		this.deduction = deduction;
 	}
 
@@ -307,6 +306,7 @@ class Solver {
 		this.lastMove = move;
 
 		// test and score the move
+		debugger;
 		move.correct = this.puzzle.test(move.board);
 		move.delta = move.correct - (null != move.base ? move.base.correct || 0 : 0);
 		if (this.moves > MAX_GUESSES) {
@@ -386,7 +386,6 @@ class Solver {
 					Math.floor(Math.random() * move.board.slots.length),
 					Math.floor(Math.random() * move.board.slots.length)
 				));
-				console.log("candidate next move ", nextMove);
 			}
 			// TODO: fix this; its retrying previous combos
 			while (
@@ -401,7 +400,6 @@ class Solver {
 			Log.out("Unable to find next move.");
 			return;
 		}
-		console.log("accepted next move ", nextMove);
 
 		setTimeout(() => this.playMove(nextMove), GUESS_DELAY);
 	}
