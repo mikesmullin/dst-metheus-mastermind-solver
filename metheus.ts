@@ -14,7 +14,7 @@ class Log {
 
 interface Puzzle {
 	test(board: Board): number;
-	getSlotCount(): number;
+	getPieceCount(): number;
 }
 
 class PuzzleDemo implements Puzzle {
@@ -30,37 +30,37 @@ class PuzzleDemo implements Puzzle {
 			new Array(length), function (v, k) { return k + 1; })));
 	}
 
-	public getSlotCount(): number {
+	public getPieceCount(): number {
 		return this.solution.length;
 	}
 
 	public test(board: Board): number {
 		let count = 0;
 		for (let i = 0, len = this.solution.length; i < len; i++) {
-			let correct = board.slots[i].quantity == this.solution[i];
+			let correct = board.pieces[i].quantity == this.solution[i];
 			if (correct) count++;
-			if (DEBUG) board.debugViewCorrectSlots[i] = correct;
+			if (DEBUG) board.debugViewCorrectPieces[i] = correct;
 		}
 		return count;
 	}
 }
 
 class HumanPuzzleInterface implements Puzzle {
-	private slotCount: number;
+	private pieceCount: number;
 
-	public constructor(slotCount: number) {
-		this.slotCount = slotCount;
+	public constructor(pieceCount: number) {
+		this.pieceCount = pieceCount;
 	}
 
-	public getSlotCount(): number {
-		return this.slotCount;
+	public getPieceCount(): number {
+		return this.pieceCount;
 	}
 
 	private lastSequence: number[] = [];
 	public test(board: Board): number {
 		let answer;
 		do {
-			let n = _.map(board.slots, (s) => s.quantity);
+			let n = _.map(board.pieces, (s) => s.quantity);
 			let display = _.map(n, (d, i) => this.lastSequence.length > 0 && d == this.lastSequence[i] ? d : `(${d})`);
 			this.lastSequence = n;
 			answer = parseInt(prompt(
@@ -102,22 +102,22 @@ class Move {
 		this.base = base;
 		this.board = _.cloneDeep(board);
 		if (null != swap) {
-			let tmp = this.board.slots[swap.a];
-			this.board.slots[swap.a] = this.board.slots[swap.b];
-			this.board.slots[swap.b] = tmp;
-			this.board.slots[swap.a].index = swap.a;
-			this.board.slots[swap.b].index = swap.b;
+			let tmp = this.board.pieces[swap.a];
+			this.board.pieces[swap.a] = this.board.pieces[swap.b];
+			this.board.pieces[swap.b] = tmp;
+			this.board.pieces[swap.a].index = swap.a;
+			this.board.pieces[swap.b].index = swap.b;
 			this.swap = swap;
 		}
 	}
 
 	public render() {
 		let s = `${this.num}: `;
-		for (let i = 0, len = this.board.slots.length; i < len; i++) {
-			let slot = this.board.slots[i];
-			let underline = (null != this.swap && (slot.quantity == this.board.slots[this.swap.a].quantity || slot.quantity == this.board.slots[this.swap.b].quantity));
-			let bold = this.board.debugViewCorrectSlots[i];
-			s += `${bold ? "<b>" : ""}${underline ? "(" : ""}${slot.quantity}${underline ? ")" : ""}${bold ? "</b>" : ""} `;
+		for (let i = 0, len = this.board.pieces.length; i < len; i++) {
+			let piece = this.board.pieces[i];
+			let underline = (null != this.swap && (piece.quantity == this.board.pieces[this.swap.a].quantity || piece.quantity == this.board.pieces[this.swap.b].quantity));
+			let bold = this.board.debugViewCorrectPieces[i];
+			s += `${bold ? "<b>" : ""}${underline ? "(" : ""}${piece.quantity}${underline ? ")" : ""}${bold ? "</b>" : ""} `;
 		}
 		s += (this.num === 1 ? "FIRST" :
 			` = ${this.correct} (${this.delta < 0 ? this.delta : `+${this.delta}`}) score: ${this.score()}`);
@@ -129,16 +129,16 @@ class Move {
 	}
 
 	public getSwapA() {
-		return this.board.slots[this.swap.a];
+		return this.board.pieces[this.swap.a];
 	}
 
 	public getSwapB() {
-		return this.board.slots[this.swap.b];
+		return this.board.pieces[this.swap.b];
 	}
 
 	public getSwapInBase(k: string) {
-		return _.find(this.base.board.slots, (s) =>
-			s.quantity === this.board.slots[this.swap[k]].quantity);
+		return _.find(this.base.board.pieces, (s) =>
+			s.quantity === this.board.pieces[this.swap[k]].quantity);
 	}
 
 	public hasSwapDeduction(a: Deduction, b: Deduction) {
@@ -175,13 +175,16 @@ class Move {
 
 			// reject if this board has been played before
 			if (Board.compare(current.board, candidate.board)) {
-				if (DEBUG) Log.out(`Rejecting board played before at move ${current.num} ${candidate.board.slots.join(" ")}`);
+				if (DEBUG) Log.out(`Rejecting board played before at move ${current.num} ${candidate.board.pieces.join(" ")}`);
 				return true;
 			}
+		}
+		for (let i = 0, len = history.length; i < len; i++) {
+			let current = history[i];
 
-			for (let i = 0, len = current.board.slots.length; i < len; i++) {
-				let cur = current.board.slots[i];
-				let can = candidate.board.slots[i];
+			for (let i = 0, len = current.board.pieces.length; i < len; i++) {
+				let cur = current.board.pieces[i];
+				let can = candidate.board.pieces[i];
 
 				// reject if history contains a YES that isn't included here
 				if (YES === cur.deduction && can.quantity !== cur.quantity) {
@@ -195,13 +198,12 @@ class Move {
 					return true;
 				}
 			}
-
-			return false;
 		}
+		return false;
 	}
 
-	public static crossJoinCandidates(candidates: Slot[]) {
-		let result: Slot[] = [];
+	public static crossJoinCandidates(candidates: Piece[]) {
+		let result: Piece[] = [];
 		for (let x = 0, xlen = candidates.length; x < xlen; x++) {
 			for (let y = 0, ylen = candidates.length; y < ylen; y++) {
 				if (x != y)
@@ -212,7 +214,7 @@ class Move {
 	}
 }
 
-class Slot {
+class Piece {
 	public index: number;
 	public quantity: number;
 	public deduction: Deduction;
@@ -221,7 +223,7 @@ class Slot {
 		if (YES === this.deduction || NO === this.deduction) return; // hard conclusions to change
 		if (DEBUG) {
 			Log.out(`    ${this.quantity}${this.deduction.substr(0, 2)}@${this.index} => ${deduction.substr(0, 2)}${deduction == YES ? " FOUND" : ""}`);
-			if (YES === deduction && !board.debugViewCorrectSlots[index]) {
+			if (YES === deduction && !board.debugViewCorrectPieces[index]) {
 				Log.out(`      but its wrong`);
 				debugger;
 			}
@@ -236,15 +238,15 @@ class Slot {
 
 
 class Board {
-	public slots: Slot[];
-	public debugViewCorrectSlots: boolean[] = [];
+	public pieces: Piece[];
+	public debugViewCorrectPieces: boolean[] = [];
 
-	public constructor(slots: Slot[]) {
-		this.slots = slots;
+	public constructor(pieces: Piece[]) {
+		this.pieces = pieces;
 	}
 
 	public findAll(fn) {
-		return _.filter(this.slots, fn);
+		return _.filter(this.pieces, fn);
 	}
 
 	public findOne(fn) {
@@ -252,9 +254,9 @@ class Board {
 	}
 
 	public static compare(a: Board, b: Board) {
-		if (a.slots.length != b.slots.length) return false;
-		for (let i = 0, len = a.slots.length; i < len; i++) {
-			if (a.slots[i].quantity != b.slots[i].quantity) {
+		if (a.pieces.length != b.pieces.length) return false;
+		for (let i = 0, len = a.pieces.length; i < len; i++) {
+			if (a.pieces[i].quantity != b.pieces[i].quantity) {
 				return false;
 			}
 		}
@@ -262,13 +264,13 @@ class Board {
 	}
 
 	public render() {
-		for (let i = 0, len = this.slots.length; i < len; i++) {
-			$("td#c" + i).text(this.slots[i].quantity + " " + this.slots[i].deduction.substr(0, 2));
+		for (let i = 0, len = this.pieces.length; i < len; i++) {
+			$("td#c" + i).text(this.pieces[i].quantity + " " + this.pieces[i].deduction.substr(0, 2));
 		}
 	}
 
 	public toString() {
-		return this.slots.join(" ");
+		return this.pieces.join(" ");
 	}
 }
 
@@ -277,21 +279,23 @@ class Solver {
 	private moves: number = 0;
 	public rootMove: Move; // root BST node
 	public lastMove: Move; // history of played moves
-	public solution: number[];
+	public known: Piece[];
+	public unknown: Piece[];
 
 	public constructor(puzzle: Puzzle) {
 		this.puzzle = puzzle;
 
 		// begin with opening move
 		this.rootMove = new Move(null, new Board(_.map(
-			new Array(this.puzzle.getSlotCount()),
+			new Array(this.puzzle.getPieceCount()),
 			(nil, i) => {
-				let slot = new Slot();
-				slot.index = i;
-				slot.quantity = i + 1;
-				slot.deduction = UNKNOWN;
-				return slot;
+				let piece = new Piece();
+				piece.index = i;
+				piece.quantity = i + 1;
+				piece.deduction = UNKNOWN;
+				return piece;
 			})));
+			_.map(this.rootMove.board.pieces, (piece) => this.unknown.push(piece));
 		this.playMove(this.rootMove);
 	}
 
@@ -321,7 +325,7 @@ class Solver {
 		// update user view
 		move.board.render();
 		move.render();
-		if (move.correct >= this.puzzle.getSlotCount()) {
+		if (move.correct >= this.puzzle.getPieceCount()) {
 			Log.out(`You win in ${this.moves} moves.`);
 			return;
 		}
@@ -345,6 +349,8 @@ class Solver {
 				// very positive difference; both are now right for sure
 				move.getSwapA().setDeduction(YES, move.board, move.swap.a);
 				move.getSwapB().setDeduction(YES, move.board, move.swap.b);
+
+
 				move.getSwapInBase("a").setDeduction(NO, move.base.board, move.swap.a);
 				move.getSwapInBase("b").setDeduction(NO, move.base.board, move.swap.b);
 			}
@@ -356,6 +362,10 @@ class Solver {
 				move.getSwapInBase("b").setDeduction(MAYBE_YES, move.base.board, move.swap.b);
 			}
 			else if (move.delta == -2) {
+
+// TODO: affect score of previous moves to re-evaluate highest score on next move
+// since we learn things about prior moves all the time
+
 				// difference; both were right for sure
 				move.getSwapA().setDeduction(NO, move.board, move.swap.a);
 				move.getSwapB().setDeduction(NO, move.board, move.swap.b);
@@ -370,7 +380,7 @@ class Solver {
 	public decide() {
 		// decide what to do next
 		let nextMove: Move;
-		let candidates: Slot[];
+		let candidates: Piece[];
 		let u, x;
 		if (1 === this.moves) { // follow-up to first move
 			// just play a swap of the first two positions
@@ -381,23 +391,9 @@ class Solver {
 			// try a unique new swap from non-yes deductions
 			let tries = 0;
 			do {
-				//				// if the previous swap was M,M or N,N
-				//				if (
-				//					(move.hasSwapDeduction(MAYBE, MAYBE) ||
-				//						move.hasSwapDeduction(NO, NO))
-				//				) {
-				//					// it should reuse A from the previous move
-				//					// unless that resulted in a no change or unexpected gain
-				//					// in which case it should now reuse B from two moves ago
-				//				}
-				//				else {
-				//					// rotate through untested swaps remaining
-				//
-				//				}
-
 				let rank = { MAYBE_YES: 1, NO: 2, UNKNOWN: 3, MAYBE_NO: 4 };
 				if (null == candidates) {
-					candidates = _.filter(move.board.slots, (s) =>
+					candidates = _.filter(move.board.pieces, (s) =>
 						_.includes([UNKNOWN, MAYBE_NO, MAYBE_YES, NO], s.deduction));
 					candidates = _.sortBy(candidates, (s) => rank[s.deduction]);
 					candidates = Move.crossJoinCandidates(candidates);
