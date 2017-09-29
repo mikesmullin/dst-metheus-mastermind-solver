@@ -2,7 +2,7 @@
 
 Visit the hosted Github Page 
 
-[https://mikesmullin.github.io/dst-metheus-mastermind-solver/]()
+[https://mikesmullin.github.io/dst-metheus-mastermind-solver/](https://mikesmullin.github.io/dst-metheus-mastermind-solver/)
 
 Make the board match what is shown in the prompt, 
 and answer the prompt with the resulting number of Yellow lights, once both Player 1 and Player 2 have clicked the blue [submit] button.
